@@ -60,11 +60,29 @@ function run_command() {
 function seal() {  
   local env_file=$SECRET-secret.env
   local sealed_secret_file=$SECRET-sealed-secret.yaml
-  local env_entries=($(grep -v '^#' $env_file| xargs))
+
+  # https://gist.github.com/judy2k/7656bfe3b322d669ef75364a46327836#gistcomment-2853823
+  # IFS changes what bash splits strings on. By default it splits on spaces, 
+  # but using the below it only does so on newlines. 
+  # We reset its behavior after we're done.
+  IFS='
+'  
+  # adhere system compatibility for xargs
+  uname_str=$(uname)
+  if [[ $uname_str == 'Linux' ]]; then
+    local env_entries=($(egrep -v '^#' $env_file | xargs -d '\n'))
+  elif [[ $uname_str == 'FreeBSD' || $uname_str == 'Darwin' ]]; then
+    local env_entries=($(egrep -v '^#' $env_file | xargs -0))
+  fi
+  IFS=  
+ 
+  # echo "env_entries: ${env_entries[@]}"
 
   for i in ${!env_entries[@]}; do 
+    # echo "${env_entries[i]}"
     local key=$(echo ${env_entries[i]} | cut -d '=' -f 1)
     local value=$(echo ${env_entries[i]} | cut -d '=' -f 2-)
+    # echo "$key=$value"
     if (( $i == 0 )); then
       echo -n $value | kubectl -n $NAMESPACE create secret generic $SECRET --dry-run=client --from-file=$key=/dev/stdin -o yaml \
         | kubeseal -o yaml > $sealed_secret_file
